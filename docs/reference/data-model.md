@@ -52,7 +52,7 @@
 ```
 
 - 모든 `input_resolution`은 local(3,3,3)·global 윈도우로 정확히 나눠떨어져 **기본 설정에서 패딩 0**(상세: [explanation/moh-lgt.md](../explanation/moh-lgt.md) §윈도우 파티셔닝).
-- head_dim = dim ÷ num_heads: block1 = 48/6 = 8, block2 = 96/8 = 12, block3 = 192/16... → 192/12 = 16.
+- head_dim = dim ÷ num_heads: block1 = 48/6 = 8, block2 = 96/8 = 12, block3 = 192/12 = 16.
 - 출력은 **raw logit**(시그모이드 미적용). 손실은 `BCEWithLogitsLoss`, 추론 확률은 메트릭 계산 시 `torch.sigmoid`로만 구한다.
 
 ## 4. MoH 윈도우 어텐션 내부 형상
