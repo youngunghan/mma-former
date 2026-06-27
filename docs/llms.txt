@@ -1,0 +1,24 @@
+# MMA-Former (NeoNet)
+
+> 3D 의료영상 PNI(신경주위 침범) 이진 분류 연구 모델 `NeoNet`. Med-Former 백본의 LGT 모듈을 MoH(Mixture-of-Heads) 어텐션으로 교체한 변종. 단일 파일 MMA-Former.py(데이터셋+모델+학습). WIP — 최종본 아님(상위 README의 서버 데이터 손실 경고). 코드 대조로 정리한 현행(as-is) 문서.
+
+## Tutorials
+- [tutorials/quickstart.md](tutorials/quickstart.md) : 설치→데이터/fold CSV 준비→단일 fold 학습→산출물 확인
+
+## How-to
+- [how-to/run-training.md](how-to/run-training.md) : 6-fold 교차검증·채널 선택·체크포인트 이어받기·산출 CSV/플롯 해석
+- [how-to/tune-moh.md](how-to/tune-moh.md) : MoH 하이퍼파라미터(moh_efficiency·num_shared_heads·load_balance_weight) 조정
+
+## Reference
+- [reference/api-reference.md](reference/api-reference.md) : 전 클래스/함수 명세(NeoNet·MoHWindowAttention3D·MoHLGTBlock·SAF·WindowPartitioner·PreprocessedDataset·compute_metrics)
+- [reference/configuration.md](reference/configuration.md) : CLI 인자 + 하드코딩 하이퍼파라미터 + 경로
+- [reference/data-model.md](reference/data-model.md) : .npy 볼륨 포맷·fold CSV 스키마·단계별 텐서 형상
+
+## Explanation
+- [explanation/architecture.md](explanation/architecture.md) : NeoNet 엔드투엔드(patch embed→3× MoH-LGT+downsample→2× SAF→classifier)
+- [explanation/moh-lgt.md](explanation/moh-lgt.md) : MoH 윈도우 어텐션(shared/routed·top-k·alpha 게이트·load balance)+LGT 블록(local+global 융합)
+- [explanation/saf-fusion.md](explanation/saf-fusion.md) : SAF 모듈(cross-attn→spatial→channel→gated fusion)
+- [explanation/known-issues.md](explanation/known-issues.md) : 코드 검증 결함 목록 — 🔴 dim_proj 미학습(6개 random-init), 🟠 drop_path no-op·resume 부분복원·AUC 무음 NaN 등. 필독.
+
+## Code
+- [MMA-Former.py](../MMA-Former.py) : 단일 스크립트 진입점(`python MMA-Former.py --val_fold N ...`). 모델 클래스 `NeoNet`.
