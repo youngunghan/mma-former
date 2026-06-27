@@ -1,6 +1,7 @@
 import argparse
 import os
 import csv
+import json
 import random
 import torch.nn as nn
 import torch
@@ -55,16 +56,37 @@ class PreprocessedDataset(Dataset):
         return image, label, pid
 
 
-def load_preprocessed_data_with_folds(preprocessed_dir, folds_csv_path, val_fold=0):
-    """Load preprocessed data with fold-based splitting"""
+def load_preprocessed_data_with_folds(preprocessed_dir, folds_csv_path, val_fold=0, strict=False):
+    """Load preprocessed data with fold-based splitting.
+
+    Validates the manifest (duplicate IDs / out-of-range folds / missing files). By default
+    these are warnings that do NOT change which samples are loaded; with strict=True they raise.
+    """
     folds_df = pd.read_csv(folds_csv_path)
     print(f"Loaded fold information: {len(folds_df)} entries")
 
     if 'fold' not in folds_df.columns or 'ID' not in folds_df.columns or 'PNI' not in folds_df.columns:
         raise ValueError(f"Required columns not found in {folds_csv_path}")
 
-    print(f"Available folds: {sorted(folds_df['fold'].unique())}")
+    print(f"Available folds: {sorted(folds_df['fold'].dropna().unique())}")
     print(f"Validation fold {val_fold}: {(folds_df['fold'] == val_fold).sum()} samples")
+
+    # --- Manifest validation (explicit, instead of silent corruption/skips) ---
+    def _flag(msg):
+        if strict:
+            raise ValueError(msg)
+        print(f"[WARN] {msg}")
+
+    dup_count = int(folds_df['ID'].astype(str).duplicated().sum())
+    if dup_count > 0:
+        _flag(f"{dup_count} duplicate patient ID(s) in {folds_csv_path} — duplicates inflate "
+              f"sample counts and the PNI/fold of the LAST duplicate row wins.")
+    bad_folds = sorted(set(folds_df['fold'].dropna().unique()) - set(range(6)))
+    if bad_folds:
+        _flag(f"Fold value(s) outside 0..5 are ignored (not assigned to train or val): {bad_folds}")
+    n_nan_fold = int(folds_df['fold'].isna().sum())
+    if n_nan_fold > 0:
+        _flag(f"{n_nan_fold} row(s) have NaN fold and are ignored.")
 
     preprocessed_files = [f for f in os.listdir(preprocessed_dir) if f.endswith('.npy')]
     print(f"Found {len(preprocessed_files)} preprocessed files")
@@ -78,6 +100,7 @@ def load_preprocessed_data_with_folds(preprocessed_dir, folds_csv_path, val_fold
 
     train_paths, train_labels, train_pids = [], [], []
     val_paths, val_labels, val_pids = [], [], []
+    missing_files = 0
 
     for patient_id in folds_df['ID'].astype(str):
         file_path_1 = os.path.join(preprocessed_dir, f'patient_{patient_id}.npy')
@@ -88,6 +111,7 @@ def load_preprocessed_data_with_folds(preprocessed_dir, folds_csv_path, val_fold
         elif os.path.exists(file_path_2):
             file_path = file_path_2
         else:
+            missing_files += 1
             continue
 
         pni = pni_dict[patient_id]
@@ -100,6 +124,9 @@ def load_preprocessed_data_with_folds(preprocessed_dir, folds_csv_path, val_fold
             train_paths.append(file_path)
             train_labels.append(pni)
             train_pids.append(patient_id)
+
+    if missing_files > 0:
+        _flag(f"{missing_files} manifest row(s) had no matching .npy file and were skipped.")
 
     print(f"\nTraining: {len(train_paths)} samples (folds {training_folds})")
     print(f"Validation: {len(val_paths)} samples (fold {val_fold})")
@@ -651,7 +678,8 @@ def compute_metrics(preds, trues):
     dice = 2 * np.sum(preds_bin * trues) / (np.sum(preds_bin) + np.sum(trues) + 1e-8)
     try:
         auc = roc_auc_score(trues, preds)
-    except:
+    except ValueError as e:
+        print(f"[WARN] AUC undefined ({e}) — returning nan (e.g. single-class validation fold).")
         auc = float('nan')
     return acc, f1, dice, auc
 
@@ -673,7 +701,7 @@ def plot_metrics(metrics_df, save_dir, timestamp, fold, learning_rate, random_se
         axes[0,0].plot(metrics_df["epoch"], metrics_df["train_loss"], label="Train Loss", color='blue', linewidth=2)
         axes[0,0].plot(metrics_df["epoch"], metrics_df["val_loss"], label="Val Loss", color='red', linewidth=2)
         if "load_balance_loss" in metrics_df.columns:
-            axes[0,0].plot(metrics_df["epoch"], metrics_df["load_balance_loss"], label="Load Balance Loss (×100)", color='orange', linewidth=1, alpha=0.7)
+            axes[0,0].plot(metrics_df["epoch"], metrics_df["load_balance_loss"], label="Load Balance Loss", color='orange', linewidth=1, alpha=0.7)
         axes[0,0].scatter(epoch_at_min_loss, metrics_df.loc[best_val_loss_idx, 'val_loss'], color='red', s=100, zorder=5, marker='*')
         axes[0,0].annotate(f'Lowest: {metrics_df.loc[best_val_loss_idx, "val_loss"]:.4f}\n@Epoch {epoch_at_min_loss}',
             xy=(epoch_at_min_loss, metrics_df.loc[best_val_loss_idx, 'val_loss']),
@@ -800,15 +828,38 @@ if __name__ == "__main__":
     parser.add_argument("--random_seed", type=int, default=42, help="Random seed")
     parser.add_argument("--batch_size", type=int, default=4, help="Batch size")
     parser.add_argument("--num_workers", type=int, default=2, help="Number of workers")
-    parser.add_argument("--use_mixed_precision", action="store_true", default=True, help="Use mixed precision")
+    parser.add_argument("--use_mixed_precision", action=argparse.BooleanOptionalAction, default=True,
+                       help="Use mixed precision (CUDA only; auto-disabled on CPU). Use --no-use_mixed_precision to disable.")
     parser.add_argument("--moh_efficiency", type=float, default=0.75, help="MoH efficiency")
     parser.add_argument("--load_balance_weight", type=float, default=0.005, help="Load balance loss weight")
     parser.add_argument("--num_shared_heads", type=int, default=2, help="Number of shared heads")
     parser.add_argument("--postfix", type=str, default="fixed_saf", help="Postfix for save directory")
-    parser.add_argument("--selected_channels", type=str, default=None, 
+    parser.add_argument("--selected_channels", type=str, default=None,
                        help="Comma-separated channel indices (e.g., '0,1,2')")
+    parser.add_argument("--output_dir", type=str, default="/home/rintern07/final/training",
+                       help="Root directory for run outputs (checkpoints, metrics, plots)")
+    parser.add_argument("--config", type=str, default=None,
+                       help="Optional JSON config; its keys set argument defaults (explicit CLI flags still override).")
+    parser.add_argument("--strict_data", action="store_true", default=False,
+                       help="Raise (instead of warn) on duplicate IDs / out-of-range folds / missing .npy files.")
 
     args = parser.parse_args()
+
+    # Optional JSON config: values become defaults so explicit CLI flags still win.
+    # Validate keys against known arguments (catch typos / stale keys early).
+    if args.config:
+        with open(args.config) as _cf:
+            _cfg = json.load(_cf)
+        if not isinstance(_cfg, dict):
+            raise ValueError(f"--config {args.config} must contain a JSON object, got {type(_cfg).__name__}")
+        valid_keys = {a.dest for a in parser._actions if a.dest not in ("help", "config")}
+        unknown = sorted(set(_cfg) - valid_keys)
+        if unknown:
+            raise ValueError(f"Unknown key(s) in --config {args.config}: {unknown}. Allowed: {sorted(valid_keys)}")
+        if _cfg.get("selected_channels") is not None and not isinstance(_cfg["selected_channels"], str):
+            raise ValueError("config 'selected_channels' must be a comma-separated string like \"0,1,2\" (or null).")
+        parser.set_defaults(**_cfg)
+        args = parser.parse_args()
 
     # Parse selected channels
     if args.selected_channels:
@@ -828,7 +879,7 @@ if __name__ == "__main__":
     torch.cuda.manual_seed(args.random_seed)
 
     # Directory setup
-    training_dir = "/home/rintern07/final/training"
+    training_dir = args.output_dir
     neonet_dir = os.path.join(training_dir, "neonet")
     os.makedirs(neonet_dir, exist_ok=True)
 
@@ -859,7 +910,7 @@ if __name__ == "__main__":
 
     # Load data
     train_paths, train_labels, train_pids, val_paths, val_labels, val_pids = load_preprocessed_data_with_folds(
-        args.preprocessed_dir, args.folds_csv, args.val_fold
+        args.preprocessed_dir, args.folds_csv, args.val_fold, strict=args.strict_data
     )
 
     if len(train_paths) == 0 or len(val_paths) == 0:
@@ -901,6 +952,11 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
+    # Mixed precision is CUDA-only; auto-disable on CPU to avoid GradScaler('cuda') misuse
+    if args.use_mixed_precision and device.type != "cuda":
+        print("Mixed precision requested but device is not CUDA — disabling AMP.")
+        args.use_mixed_precision = False
+
     model = NeoNet(
         in_channels=in_channels,
         moh_efficiency=args.moh_efficiency, 
@@ -933,53 +989,92 @@ if __name__ == "__main__":
         from torch.cuda.amp import GradScaler
         scaler = GradScaler() if args.use_mixed_precision else None
 
-    # Model loading
+    # Training state (overridden below if a resumable checkpoint exists)
     best_model_path = os.path.join(save_dir, "best_neonet_model.pth")
+    start_epoch = 0
+    best_val_loss = float("inf")
+    best_val_loss_auc = 0.0
+    epochs_since_improvement = 0
+    resuming = False
 
     if os.path.exists(best_model_path):
         print(f"\n{'='*60}")
-        print(f"Existing model found: {best_model_path}")
-        
+        print(f"Existing checkpoint found: {best_model_path}")
+
         try:
             checkpoint = torch.load(best_model_path, map_location=device, weights_only=False)
-            missing_keys, unexpected_keys = model.load_state_dict(checkpoint, strict=False)
-            
+            if isinstance(checkpoint, dict) and "model" in checkpoint:
+                # Full checkpoint: restore model + optimizer + scaler + training state.
+                # MoHWindowAttention3D.dim_proj is created lazily on the first forward, so it does not
+                # exist on the model yet here. Run ONE dummy forward to materialize it before loading;
+                # otherwise the saved dim_proj.* weights are dropped as unexpected_keys and the forward
+                # path would use a NEW random projection (breaking resume reproducibility). This runs
+                # only on resume (a checkpoint exists), so fresh-run behaviour is unchanged. dim_proj is
+                # still created after the optimizer, so it remains untrained (issue #1 is preserved).
+                if any(".dim_proj." in k for k in checkpoint["model"]):
+                    was_training = model.training
+                    model.eval()
+                    with torch.no_grad():
+                        try:
+                            model(torch.zeros(1, in_channels, 96, 96, 48, device=device),
+                                  return_load_balance_loss=True)
+                        except Exception as e:
+                            print(f"[WARN] Could not pre-materialize dim_proj ({e}); it will be re-created lazily.")
+                    if was_training:
+                        model.train()
+                missing_keys, unexpected_keys = model.load_state_dict(checkpoint["model"], strict=False)
+                if checkpoint.get("optimizer") is not None:
+                    optimizer.load_state_dict(checkpoint["optimizer"])
+                if scaler is not None and checkpoint.get("scaler") is not None:
+                    scaler.load_state_dict(checkpoint["scaler"])
+                start_epoch = int(checkpoint.get("epoch", 0))
+                best_val_loss = float(checkpoint.get("best_val_loss", float("inf")))
+                best_val_loss_auc = float(checkpoint.get("best_val_loss_auc", 0.0))
+                epochs_since_improvement = int(checkpoint.get("epochs_since_improvement", 0))
+                resuming = True
+                print(f"Resuming full training state from epoch {start_epoch} "
+                      f"(best_val_loss={best_val_loss:.4f}, AUC={best_val_loss_auc:.4f}).")
+            else:
+                # Legacy checkpoint: bare state_dict, weights only (no optimizer/epoch -> warm-start)
+                missing_keys, unexpected_keys = model.load_state_dict(checkpoint, strict=False)
+                resuming = True
+                print("Loaded legacy weights-only checkpoint (optimizer/epoch not restored — warm-start).")
+
             if missing_keys:
                 print(f"Missing keys: {len(missing_keys)} layers")
             if unexpected_keys:
                 print(f"Unexpected keys: {len(unexpected_keys)} layers")
-            
-            print("Continuing training with partial model loading...")
         except Exception as e:
-            print(f"Could not load model: {e}")
+            print(f"Could not load checkpoint: {e}")
             print("Starting from scratch")
-        
+            start_epoch, best_val_loss, best_val_loss_auc, epochs_since_improvement, resuming = 0, float("inf"), 0.0, 0, False
+
         print(f"{'='*60}\n")
 
     # CSV setup
     csv_path = os.path.join(save_dir, "neonet_training_metrics.csv")
     pred_csv_path = os.path.join(save_dir, "neonet_val_predictions.csv")
 
-    with open(csv_path, "w", newline="") as f:
-        csv.writer(f).writerow(["epoch", "train_loss", "val_loss", "val_acc", "val_f1", "val_dice", "val_auc", "load_balance_loss"])
+    # Fresh run: write headers (truncate). Resume: keep existing history (append).
+    if not (resuming and os.path.exists(csv_path)):
+        with open(csv_path, "w", newline="") as f:
+            csv.writer(f).writerow(["epoch", "train_loss", "val_loss", "val_acc", "val_f1", "val_dice", "val_auc", "load_balance_loss"])
 
-    with open(pred_csv_path, "w", newline="") as f:
-        csv.writer(f).writerow(["epoch", "pid", "gt", "pred_score", "pred_binary"])
+    if not (resuming and os.path.exists(pred_csv_path)):
+        with open(pred_csv_path, "w", newline="") as f:
+            csv.writer(f).writerow(["epoch", "pid", "gt", "pred_score", "pred_binary"])
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    # Training loop
+    # Training loop (best_val_loss / start_epoch / counters initialized above and possibly resumed)
     max_epochs = 200
     early_stop_patience = 30
-    best_val_loss = float("inf")
-    best_val_loss_auc = 0.0
-    epochs_since_improvement = 0
 
     print("=" * 80)
     print("STARTING NEONET TRAINING WITH FIXED SAF")
     print("=" * 80)
 
-    for epoch in range(max_epochs):
+    for epoch in range(start_epoch, max_epochs):
         # Training
         model.train()
         train_loss, train_bce_loss, train_lb_loss, train_batches = 0.0, 0.0, 0.0, 0
@@ -1092,7 +1187,15 @@ if __name__ == "__main__":
             best_val_loss = avg_val_loss
             best_val_loss_auc = auc
             epochs_since_improvement = 0
-            torch.save(model.state_dict(), best_model_path)
+            torch.save({
+                "epoch": epoch + 1,
+                "model": model.state_dict(),
+                "optimizer": optimizer.state_dict(),
+                "scaler": scaler.state_dict() if scaler is not None else None,
+                "best_val_loss": best_val_loss,
+                "best_val_loss_auc": best_val_loss_auc,
+                "epochs_since_improvement": epochs_since_improvement,
+            }, best_model_path)
             print(f"    ✅ New best model saved! Val Loss: {best_val_loss:.4f}, AUC: {best_val_loss_auc:.4f}")
         else:
             epochs_since_improvement += 1

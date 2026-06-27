@@ -19,13 +19,14 @@ pip install torch numpy pandas scikit-learn matplotlib tqdm monai
 
 ## 2. 학습 실행
 
-기본 경로는 `/home/rintern07/...`로 하드코딩돼 있으니 **자신의 경로로 덮어쓴다**:
+기본 경로는 `/home/rintern07/...`로 박혀 있으니 **자신의 경로로 덮어쓴다**(`--output_dir`로 산출 위치도 옮긴다):
 
 ```bash
 python MMA-Former.py \
   --val_fold 1 \
   --preprocessed_dir /path/to/preprocessed_96x96x48 \
   --folds_csv /path/to/folds.csv \
+  --output_dir ./runs \
   --batch_size 4 \
   --learning_rate 8e-5 \
   --random_seed 42
@@ -33,6 +34,8 @@ python MMA-Former.py \
 
 - `--val_fold 1` → fold 1이 검증, 나머지(0,2,3,4,5)가 학습.
 - 입력 채널이 3이 아니면 `--selected_channels "0,1"`처럼 지정(개수가 `in_channels`가 됨).
+- 경로·하이퍼파라미터를 파일로 관리하려면 [configs/example_config.json](../../configs/example_config.json)을 복사해 `--config my_config.json`으로 넘긴다(명시 CLI 플래그가 우선).
+- GPU가 없으면 AMP는 자동으로 꺼진다(`--no-use_mixed_precision`으로 명시적 비활성도 가능).
 
 ## 3. 콘솔에서 확인할 것
 
@@ -52,7 +55,7 @@ Epoch   1 | Train: 0.7xxx (BCE: .., LB: ..) | Val: 0.6xxx (BCE: .., LB: ..) | AU
 
 | 파일 | 내용 |
 |---|---|
-| `best_neonet_model.pth` | val_loss 최저 시점 `state_dict` |
+| `best_neonet_model.pth` | val_loss 최저 시점 체크포인트 dict(`model`·`optimizer`·`scaler`·`epoch`·best 상태) — 이어받기 입력 |
 | `neonet_training_metrics.csv` | epoch별 loss·acc·f1·dice·auc·lb |
 | `neonet_val_predictions.csv` | epoch·pid·gt·pred_score·pred_binary |
 | `pictures/*.png` | 매 10 epoch 6분할 메트릭 플롯 |

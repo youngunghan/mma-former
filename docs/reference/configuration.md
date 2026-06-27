@@ -1,6 +1,6 @@
 # 설정 — CLI 인자·하드코딩 하이퍼파라미터·경로
 
-> **범위:** [MMA-Former.py](../../MMA-Former.py) `__main__`의 `argparse` 인자와 코드에 하드코딩된 학습 상수·경로를 표로 정리한다. 외부 설정 파일은 없다(모든 설정이 CLI 또는 소스 상수).
+> **범위:** [MMA-Former.py](../../MMA-Former.py) `__main__`의 `argparse` 인자와 코드에 하드코딩된 학습 상수·경로를 표로 정리한다. 설정은 CLI 인자 + 선택적 JSON 파일(`--config`, ✅ 2026-06-27)로 주거나 소스 상수로 박혀 있다.
 > **대상:** 실험 실행자.
 > **상태:** 구현 반영 — 기준일 2026-06-27.
 
@@ -17,12 +17,15 @@
 | `--random_seed` | int | `42` | `set_determinism`+`random`+`numpy`+`torch`+`cuda` 시드 |
 | `--batch_size` | int | `4` | train/val 공통 |
 | `--num_workers` | int | `2` | DataLoader 워커 수 |
-| `--use_mixed_precision` | flag | `True` | 🟠 `store_true`+`default=True` → **CLI로 끌 수 없음**(항상 True) |
+| `--use_mixed_precision` | bool flag | `True` | `BooleanOptionalAction` — `--no-use_mixed_precision`로 끌 수 있음. CPU에서는 자동 비활성(✅ 2026-06-27) |
 | `--moh_efficiency` | float | `0.75` | MoH top-k 비율(아래 §2 참조) |
 | `--load_balance_weight` | float | `0.005` | 총손실에서 load-balance loss 가중치 |
 | `--num_shared_heads` | int | `2` | MoH always-on 공유 헤드 수 |
 | `--postfix` | str | `fixed_saf` | 저장 디렉터리명 접미사 |
 | `--selected_channels` | str | `None` | `"0,1,2"` 형태. 지정 시 `in_channels`가 선택 수로 결정, 미지정 시 3 |
+| `--output_dir` | str | `/home/rintern07/final/training` | 산출 루트(체크포인트·metrics·plot). 기본은 기존값 유지(✅ 2026-06-27) |
+| `--config` | str | `None` | JSON 설정 파일. 값이 인자 기본값이 되고 명시 CLI 플래그가 우선([configs/example_config.json](../../configs/example_config.json))(✅ 2026-06-27) |
+| `--strict_data` | flag | `False` | 중복 ID/`range(6)` 밖 fold/누락 `.npy`를 경고 대신 `ValueError`로 중단(✅ 2026-06-27) |
 
 ## 2. MoH 파생값
 
@@ -71,10 +74,10 @@ MONAI dict transform. validation에는 적용 안 함(`transform=None`). 키는 
 
 ## 5. 산출 경로·파일
 
-기준 루트는 하드코딩된 `/home/rintern07/final/training/neonet/`. 실행 환경이 다르면 코드 수정 필요(🟢 환경 종속).
+기준 루트는 `--output_dir`(기본 `/home/rintern07/final/training`) 아래 `neonet/`. `--output_dir`로 옮길 수 있다(✅ 2026-06-27, 이전엔 하드코딩).
 
 - 저장 디렉터리명: `fold{V}_seed{S}_lr{LR}_moh{MOH%}_lb{LB}_sh{SH}_{postfix}` 형태.
-- `best_neonet_model.pth` — val_loss 최저 시 `state_dict` 저장(이어받기 입력으로도 사용).
+- `best_neonet_model.pth` — val_loss 최저 시 **체크포인트 dict**(`epoch`·`model`·`optimizer`·`scaler`·`best_val_loss`·`best_val_loss_auc`·`epochs_since_improvement`) 저장. 이어받기 입력으로 사용(✅ 2026-06-27, 이전엔 bare `state_dict`; 구버전 체크포인트는 weight-only로 자동 호환).
 - `neonet_training_metrics.csv` — epoch별 train/val loss·acc·f1·dice·auc·load_balance_loss.
 - `neonet_val_predictions.csv` — epoch·pid·gt·pred_score·pred_binary.
 - `pictures/neonet_metrics_epoch_*.png` — 6분할 메트릭 플롯(매 10 epoch).

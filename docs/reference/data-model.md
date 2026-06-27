@@ -31,7 +31,7 @@
 
 - 세 컬럼이 모두 없으면 `ValueError`로 중단한다(컬럼명 대문자 `ID`·`PNI` 정확히 일치 필요).
 - **분할 규칙:** validation = `fold == val_fold`인 행, training = `fold ∈ {0,1,2,3,4,5} \ {val_fold}`. 즉 하드코딩된 6-fold다.
-- 🟠 `fold` 값이 `range(6)` 밖이거나 NaN인 행은 train/val 어디에도 들어가지 않고 **조용히 누락**된다. 파일이 없는 행도 마찬가지(`continue`).
+- `fold` 값이 `range(6)` 밖이거나 NaN인 행, 파일이 없는 행, 중복 ID는 train/val에서 제외되거나 마지막 행으로 덮어써진다. **이제 모두 `[WARN]`으로 표시**되며 `--strict_data`면 `ValueError`로 중단한다(✅ 2026-06-27, 이전엔 무음). 기본(비-strict)에서 실제 로드되는 표본은 이전과 동일.
 
 ## 3. 단계별 텐서 형상 (기본 설정)
 

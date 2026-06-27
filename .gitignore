@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+
+# Run outputs (checkpoints, metrics, plots)
+runs/
+*.pth
+neonet_*.csv
+pictures/
+best_scores/
+
+# Data (not redistributed)
+*.npy

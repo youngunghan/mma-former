@@ -18,7 +18,7 @@
 - [explanation/architecture.md](explanation/architecture.md) : NeoNet 엔드투엔드(patch embed→3× MoH-LGT+downsample→2× SAF→classifier)
 - [explanation/moh-lgt.md](explanation/moh-lgt.md) : MoH 윈도우 어텐션(shared/routed·top-k·alpha 게이트·load balance)+LGT 블록(local+global 융합)
 - [explanation/saf-fusion.md](explanation/saf-fusion.md) : SAF 모듈(cross-attn→spatial→channel→gated fusion)
-- [explanation/known-issues.md](explanation/known-issues.md) : 코드 검증 결함 목록 — 🔴 dim_proj 미학습(6개 random-init), 🟠 drop_path no-op·resume 부분복원·AUC 무음 NaN 등. 필독.
+- [explanation/known-issues.md](explanation/known-issues.md) : 코드 검증 결함 목록 — 🔴 dim_proj 미학습(6개 random-init), 🟠 drop_path no-op·shift_size 미사용·MoH/dense 차원 불일치(모델 동작 보존). resume·AMP 토글·AUC·CSV append·plot·경로/데이터검증은 ✅ 2026-06-27 해결. 필독.
 
 ## Code
 - [MMA-Former.py](../MMA-Former.py) : 단일 스크립트 진입점(`python MMA-Former.py --val_fold N ...`). 모델 클래스 `NeoNet`.

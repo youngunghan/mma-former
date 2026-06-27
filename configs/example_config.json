@@ -1,0 +1,17 @@
+{
+  "preprocessed_dir": "/path/to/preprocessed_96x96x48",
+  "folds_csv": "/path/to/folds.csv",
+  "output_dir": "./runs",
+  "val_fold": 1,
+  "learning_rate": 8e-05,
+  "random_seed": 42,
+  "batch_size": 4,
+  "num_workers": 2,
+  "use_mixed_precision": true,
+  "moh_efficiency": 0.75,
+  "load_balance_weight": 0.005,
+  "num_shared_heads": 2,
+  "postfix": "fixed_saf",
+  "selected_channels": null,
+  "strict_data": false
+}

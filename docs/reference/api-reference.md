@@ -12,9 +12,11 @@
 
 - ⚠️ `transform`을 주면 **MONAI dict-transform**이어야 한다 — `__getitem__`이 `transform({"input": image})["input"]`로 호출하므로 리터럴 키 `"input"`을 받고 돌려주는 변환만 동작한다. 평범한 텐서 콜러블을 넘기면 런타임 오류.
 
-### `load_preprocessed_data_with_folds(preprocessed_dir, folds_csv_path, val_fold=0)`
+### `load_preprocessed_data_with_folds(preprocessed_dir, folds_csv_path, val_fold=0, strict=False)`
 
 fold CSV를 읽어 train/val 경로·라벨·pid 6-튜플 반환: `(train_paths, train_labels, train_pids, val_paths, val_labels, val_pids)`. 컬럼 `ID·fold·PNI` 필수. 파일명 `patient_{id}.npy`/`patient{id}.npy` 양쪽 시도. 스키마는 [reference/data-model.md](data-model.md) §2.
+
+- `strict`(기본 `False`): 중복 ID·`range(6)` 밖/NaN fold·누락 `.npy`를 발견하면 `False`는 `[WARN]`만(로드되는 표본 불변), `True`는 `ValueError`로 중단(✅ 2026-06-27). `--strict_data`로 연결.
 
 ## 2. 윈도우 파티셔닝
 

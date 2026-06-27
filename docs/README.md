@@ -3,7 +3,8 @@
 3D 의료영상 **PNI(Perineural Invasion, 신경주위 침범) 이진 분류**를 위한 연구용 모델 `NeoNet`의 문서 허브.
 Med-Former 계열 백본의 **LGT(Local-Global Transformer) 모듈을 MoH(Mixture-of-Heads) 어텐션으로 교체**한 변종이다.
 
-> ⚠️ 상위 `README.md` 명시: *"이전 서버 데이터 날아감 이슈로 최종버전이 아닙니다. Med-Former의 LGT 모듈에 MoH 버전이 구현된 버전입니다."* — **연구 진행 중(WIP) 코드**이며 최종본이 아니다. 본 문서는 단일 파일 [MMA-Former.py](../MMA-Former.py)(약 1,117줄)를 코드 대조로 정리한 **현행(as-is)** 기록이다.
+> ⚠️ 상위 `README.md` 명시: *"이전 서버 데이터 날아감 이슈로 최종버전이 아닙니다. Med-Former의 LGT 모듈에 MoH 버전이 구현된 버전입니다."* — **연구 진행 중(WIP) 코드**이며 최종본이 아니다. 본 문서는 단일 파일 [MMA-Former.py](../MMA-Former.py)를 코드 대조로 정리한 기록이다.
+> **2026-06-27 안전 수정 반영:** 학습 결과/아키텍처를 바꾸지 않는 견고성·재현성 항목(resume·AMP 토글·출력 경로·데이터 검증·AUC·CSV·plot 라벨)을 코드에서 수정했다. 모델 동작을 바꾸는 결함(🔴 `dim_proj` 미학습 등)은 **의도적으로 보존**(기존 결과 호환). 상세 [explanation/known-issues.md](explanation/known-issues.md).
 
 - 코드: [MMA-Former.py](../MMA-Former.py) — 데이터셋·모델·학습 루프가 모두 들어 있는 단일 스크립트.
 - 상위 저장소: `SNU-MED-AI-for-Paper-publication`(MICCAI·ISBI·NeurIPS·AAAI·IEEE 투고 대상 연구 모노레포). 모델 클래스명 `NeoNet`은 상위 README의 `Ours/NeoNet` 항목과 대응한다.
